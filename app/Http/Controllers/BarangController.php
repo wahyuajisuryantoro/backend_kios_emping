@@ -11,55 +11,56 @@ use Illuminate\Support\Facades\Storage;
 
 class BarangController extends Controller
 {
-    public function index()
+    public function index(Request $request)
+    {
+        $query = Barang::with(['kategori:id,nama_kategori', 'stok:kode_barang,stok_awal', 'harga:kode_barang,harga_beli'])
+            ->select([
+                'id',
+                'kode_barang',
+                'nama_barang',
+                'kategori_id',
+                'gambar_barang',
+                'tanggal_kadaluarsa'
+            ])
+            ->when($request->search, function ($query, $search) {
+                return $query->where('nama_barang', 'like', "%{$search}%")
+                    ->orWhere('kode_barang', 'like', "%{$search}%");
+            })
+            ->when($request->kategori_id, function ($query, $kategoriId) {
+                return $query->where('kategori_id', $kategoriId);
+            });
+
+        $perPage = $request->per_page ?? 10;
+        $barang = $query->latest()->paginate($perPage);
+
+        return response()->json($barang);
+    }
+
+    public function show($kodeBarang)
     {
         try {
-            $barang = Barang::with(['kategori', 'stok', 'harga'])
-                            ->orderBy('created_at', 'desc')
-                            ->get();
+            $barang = Barang::with([
+                'kategori',
+                'stok' => function ($query) {
+                    $query->latest('tanggal_stok')->first();
+                },
+                'harga' => function ($query) {
+                    $query->latest('tanggal_perubahan_harga')->first();
+                }
+            ])->where('kode_barang', $kodeBarang)->firstOrFail();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Data barang berhasil diambil',
-                'data' => $barang->map(function ($item) {
-                    return [
-                        'kode_barang' => $item->kode_barang,
-                        'nama_barang' => $item->nama_barang,
-                        'kategori' => [
-                            'id' => $item->kategori->id,
-                            'nama_kategori' => $item->kategori->nama_kategori
-                        ],
-                        'merk_barang' => $item->merk_barang,
-                        'deskripsi_barang' => $item->deskripsi_barang,
-                        'berat_barang' => $item->berat_barang,
-                        'volume_barang' => $item->volume_barang,
-                        'satuan_barang' => $item->satuan_barang,
-                        'gambar_barang' => $item->gambar_barang,
-                        'tanggal_kadaluarsa' => $item->tanggal_kadaluarsa,
-                        'stok' => [
-                            'stok_awal' => $item->stok->stok_awal,
-                            'stok_akhir' => $item->stok->stok_akhir,
-                            'status_barang' => $item->stok->status_barang
-                        ],
-                        'harga' => [
-                            'harga_beli' => $item->harga->harga_beli,
-                            'harga_jual_eceran' => $item->harga->harga_jual_eceran,
-                            'harga_jual_grosir' => $item->harga->harga_jual_grosir,
-                            'diskon_eceran' => $item->harga->diskon_eceran,
-                            'diskon_grosir' => $item->harga->diskon_grosir
-                        ]
-                    ];
-                })
-            ], 200);
-
+                'data' => $barang
+            ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal mengambil data barang: ' . $e->getMessage()
-            ], 500);
+                'message' => 'Barang tidak ditemukan'
+            ], 404);
         }
     }
-    
+
     public function store(Request $request)
     {
         $request->validate([

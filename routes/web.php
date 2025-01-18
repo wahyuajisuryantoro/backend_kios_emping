@@ -13,12 +13,12 @@ Route::get('/', function () {
 Route::prefix('api')->group(function () {
     Route::apiResource('kategori', KategoriController::class);
 
-    Route::prefix('barang')->group(function () {
-        Route::get('/', [BarangController::class, 'index']);
-        Route::post('/', [BarangController::class, 'store']);
-        Route::get('/{kodeBarang}', [BarangController::class, 'show']);
-        Route::put('/{kodeBarang}', [BarangController::class, 'update']);
-        Route::delete('/{kodeBarang}', [BarangController::class, 'destroy']);
+    Route::controller(BarangController::class)->group(function () {
+        Route::get('barang/list', 'index');          
+        Route::post('barang/create', 'store');
+        Route::get('barang/{kodeBarang}', 'show');        
+        Route::put('barang/{kodeBarang}', 'update');
+        Route::delete('barang/{kodeBarang}', 'destroy');
     });
 
 
