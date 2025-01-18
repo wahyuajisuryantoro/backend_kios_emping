@@ -11,29 +11,59 @@ use Illuminate\Support\Facades\Storage;
 
 class BarangController extends Controller
 {
+    // BarangController.php
     public function index(Request $request)
     {
-        $query = Barang::with(['kategori:id,nama_kategori', 'stok:kode_barang,stok_awal', 'harga:kode_barang,harga_beli'])
-            ->select([
-                'id',
+        try {
+            $query = Barang::with([
+                'kategori',
+                'stok' => function ($query) {
+                    $query->select('kode_barang', 'stok_awal', 'status_barang');
+                },
+                'harga' => function ($query) {
+                    $query->select('kode_barang', 'harga_beli');
+                }
+            ])->select([
                 'kode_barang',
                 'nama_barang',
                 'kategori_id',
                 'gambar_barang',
                 'tanggal_kadaluarsa'
-            ])
-            ->when($request->search, function ($query, $search) {
-                return $query->where('nama_barang', 'like', "%{$search}%")
-                    ->orWhere('kode_barang', 'like', "%{$search}%");
-            })
-            ->when($request->kategori_id, function ($query, $kategoriId) {
-                return $query->where('kategori_id', $kategoriId);
-            });
+            ]);
 
-        $perPage = $request->per_page ?? 10;
-        $barang = $query->latest()->paginate($perPage);
+            // Search
+            if ($request->has('search')) {
+                $search = $request->search;
+                $query->where(function ($q) use ($search) {
+                    $q->where('nama_barang', 'like', "%{$search}%")
+                        ->orWhere('kode_barang', 'like', "%{$search}%");
+                });
+            }
 
-        return response()->json($barang);
+            // Filter kategori
+            if ($request->has('kategori_id')) {
+                $query->where('kategori_id', $request->kategori_id);
+            }
+
+            // Pagination
+            $perPage = $request->per_page ?? 10;
+            $barang = $query->latest('created_at')->paginate($perPage);
+
+            return response()->json([
+                'success' => true,
+                'data' => $barang->items(),
+                'current_page' => $barang->currentPage(),
+                'last_page' => $barang->lastPage(),
+                'total' => $barang->total(),
+                'per_page' => $barang->perPage(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan dalam memuat data barang',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     public function show($kodeBarang)
