@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Storage;
 
 class BarangController extends Controller
 {
-    // BarangController.php
+
     public function index(Request $request)
     {
         try {
@@ -31,7 +31,7 @@ class BarangController extends Controller
                 'tanggal_kadaluarsa'
             ]);
 
-            // Search
+
             if ($request->has('search')) {
                 $search = $request->search;
                 $query->where(function ($q) use ($search) {
@@ -40,12 +40,12 @@ class BarangController extends Controller
                 });
             }
 
-            // Filter kategori
+
             if ($request->has('kategori_id')) {
                 $query->where('kategori_id', $request->kategori_id);
             }
 
-            // Pagination
+
             $perPage = $request->per_page ?? 10;
             $barang = $query->latest('created_at')->paginate($perPage);
 
@@ -108,13 +108,13 @@ class BarangController extends Controller
 
         DB::beginTransaction();
         try {
-            // Upload gambar jika ada
+
             $gambarPath = null;
             if ($request->hasFile('gambar_barang')) {
                 $gambarPath = $request->file('gambar_barang')->store('barang');
             }
 
-            // Create Barang
+
             $barang = Barang::create([
                 'kode_barang' => $request->kode_barang,
                 'nama_barang' => $request->nama_barang,
@@ -128,7 +128,7 @@ class BarangController extends Controller
                 'tanggal_kadaluarsa' => $request->tanggal_kadaluarsa
             ]);
 
-            // Create Stok
+
             $stokAwal = $request->stok_awal;
             $stok = Stok::create([
                 'kode_barang' => $barang->kode_barang,
@@ -140,7 +140,7 @@ class BarangController extends Controller
                 'status_barang' => $stokAwal <= 0 ? 'Habis' : ($request->batas_minimum_stok && $stokAwal <= $request->batas_minimum_stok ? 'Hampir Habis' : 'Tersedia')
             ]);
 
-            // Create Harga
+
             $harga = Harga::create([
                 'kode_barang' => $barang->kode_barang,
                 'harga_beli' => $request->harga_beli,
@@ -190,9 +190,9 @@ class BarangController extends Controller
         try {
             $barang = Barang::findOrFail($kodeBarang);
 
-            // Update gambar jika ada
+
             if ($request->hasFile('gambar_barang')) {
-                // Hapus gambar lama
+
                 if ($barang->gambar_barang) {
                     Storage::delete($barang->gambar_barang);
                 }
@@ -200,7 +200,7 @@ class BarangController extends Controller
                 $barang->gambar_barang = $gambarPath;
             }
 
-            // Update Barang
+
             $barang->update([
                 'nama_barang' => $request->nama_barang,
                 'kategori_id' => $request->kategori_id,
@@ -212,7 +212,7 @@ class BarangController extends Controller
                 'tanggal_kadaluarsa' => $request->tanggal_kadaluarsa
             ]);
 
-            // Update Stok
+
             $stok = Stok::where('kode_barang', $kodeBarang)->first();
             if ($stok) {
                 $stok->update([
@@ -224,7 +224,7 @@ class BarangController extends Controller
                 ]);
             }
 
-            // Update Harga
+
             $harga = Harga::where('kode_barang', $kodeBarang)->first();
             if ($harga) {
                 $harga->update([
@@ -264,12 +264,10 @@ class BarangController extends Controller
         try {
             $barang = Barang::findOrFail($kodeBarang);
 
-            // Hapus gambar jika ada
             if ($barang->gambar_barang) {
                 Storage::delete($barang->gambar_barang);
             }
 
-            // Hapus data terkait
             Stok::where('kode_barang', $kodeBarang)->delete();
             Harga::where('kode_barang', $kodeBarang)->delete();
             $barang->delete();
@@ -278,13 +276,13 @@ class BarangController extends Controller
 
             return response()->json([
                 'success' => true,
-                'message' => 'Data barang berhasil dihapus'
-            ]);
+                'message' => 'Produk berhasil dihapus'
+            ], 200); 
         } catch (\Exception $e) {
             DB::rollback();
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menghapus data barang: ' . $e->getMessage()
+                'message' => 'Gagal menghapus produk: ' . $e->getMessage()
             ], 500);
         }
     }
