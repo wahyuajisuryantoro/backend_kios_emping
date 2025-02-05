@@ -3,15 +3,18 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Transaksi extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'tbl_transaksi';
     protected $primaryKey = 'no_transaksi';
-    protected $keyType = 'string';
     public $incrementing = false;
-    protected $dates = ['tanggal_transaksi', 'deleted_at'];
-    
+    protected $keyType = 'string';
+
     protected $fillable = [
         'no_transaksi',
         'tanggal_transaksi',
@@ -23,7 +26,14 @@ class Transaksi extends Model
         'keterangan'
     ];
 
-    public function details()
+    protected $casts = [
+        'tanggal_transaksi' => 'date',
+        'total_harga' => 'decimal:2',
+        'total_diskon' => 'decimal:2',
+        'grand_total' => 'decimal:2'
+    ];
+
+    public function details(): HasMany
     {
         return $this->hasMany(TransaksiDetails::class, 'no_transaksi', 'no_transaksi');
     }

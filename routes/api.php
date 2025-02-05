@@ -37,4 +37,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('penjualan/{noTransaksi}', 'show');
         Route::get('penjualan/laporan/harian', 'getLaporanHarian');
     });
+
+    Route::post('/logout', [AuthController::class, 'logout']);
 });

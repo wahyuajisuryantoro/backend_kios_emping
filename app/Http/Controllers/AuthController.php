@@ -6,6 +6,7 @@ use App\Models\Toko;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class AuthController extends Controller
 {
@@ -43,30 +44,43 @@ class AuthController extends Controller
 
     public function login(Request $request)
     {
-        $request->validate([
-            'email' => 'required|email',
-            'password' => 'required'
-        ]);
-
-        if (!Auth::attempt($request->only('email', 'password'))) {
+        try {
+            $request->validate([
+                'email' => 'required|email',
+                'password' => 'required'
+            ]);
+            if (!Auth::guard('web')->attempt($request->only('email', 'password'))) {
+                return response()->json([
+                    'message' => 'Email atau password salah'
+                ], 401);
+            }   
+            $user = User::where('email', $request->email)->firstOrFail();
+            $toko = $user->toko;
+            $user->tokens()->delete();
+            $token = $user->createToken('auth-token')->plainTextToken;
+            Log::info('Login successful', [
+                'user_id' => $user->id,
+                'token' => $token
+            ]);
+    
             return response()->json([
-                'message' => 'Email atau password salah'
-            ], 401);
+                'message' => 'Login berhasil',
+                'user' => $user,
+                'toko' => $toko,
+                'token' => $token 
+            ]);
+    
+        } catch (\Exception $e) {
+            Log::error('Login Error:', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'message' => 'Terjadi kesalahan pada server'
+            ], 500);
         }
-        
-        $user = User::where('email', $request->email)->first();
-        $toko = $user->toko;
-        $user->tokens()->delete();
-        $token = $user->createToken('auth-token')->plainTextToken;
-
-        return response()->json([
-            'message' => 'Login berhasil',
-            'user' => $user,
-            'toko' => $toko,
-            'token' => $token 
-        ]);
     }
-
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();

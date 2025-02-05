@@ -9,11 +9,12 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Stok extends Model
 {
     use SoftDeletes;
-    
+
     protected $table = 'tbl_stok';
     protected $primaryKey = 'id_stok';
-    
+
     protected $fillable = [
+        'toko_id',
         'kode_barang',
         'stok_awal',
         'stok_masuk',
@@ -26,13 +27,19 @@ class Stok extends Model
     ];
 
     protected $casts = [
+        'tanggal_stok' => 'date',
         'stok_awal' => 'integer',
         'stok_masuk' => 'integer',
         'stok_keluar' => 'integer',
         'stok_akhir' => 'integer',
-        'batas_minimum_stok' => 'integer',
-        'tanggal_stok' => 'date'
+        'batas_minimum_stok' => 'integer'
     ];
+
+    // Tambah relasi ke Toko
+    public function toko(): BelongsTo
+    {
+        return $this->belongsTo(Toko::class);
+    }
 
     public function barang(): BelongsTo
     {

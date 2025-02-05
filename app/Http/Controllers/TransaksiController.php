@@ -2,177 +2,165 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Harga;
-use App\Models\Stok;
 use App\Models\Transaksi;
-use Carbon\Carbon;
+use App\Models\TransaksiDetail;
+use App\Models\Barang;
+use App\Models\Stok;
+use App\Models\Harga;
+use App\Models\TransaksiDetails;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 
 class TransaksiController extends Controller
 {
     public function penjualan(Request $request)
     {
-        $request->validate([
-            'items' => 'required|array|min:1',
-            'items.*.kode_barang' => 'required|exists:tbl_barang,kode_barang',
-            'items.*.quantity' => 'required|integer|min:1',
-            'no_referensi' => 'nullable|string',
-            'keterangan' => 'nullable|string',
-        ]);
-
-        DB::beginTransaction();
         try {
-            // Generate nomor transaksi
-            $today = Carbon::now();
-            $noTransaksi = 'PJ-' . $today->format('Ymd') . '-' . 
-                          str_pad(Transaksi::whereDate('created_at', $today)->count() + 1, 3, '0', STR_PAD_LEFT);
+            $user = Auth::user();
+            $toko = $user->toko;
 
-            // Inisialisasi total
-            $totalHarga = 0;
-            $totalDiskon = 0;
-
-            // Proses setiap item
-            $items = collect($request->items)->map(function ($item) use (&$totalHarga, &$totalDiskon) {
-                // Ambil harga terkini
-                $harga = Harga::where('kode_barang', $item['kode_barang'])
-                    ->latest('tanggal_perubahan_harga')
-                    ->first();
-
-                // Tentukan harga dan diskon berdasarkan quantity
-                $hargaSatuan = $item['quantity'] >= $harga->min_qty_grosir 
-                    ? $harga->harga_jual_grosir 
-                    : $harga->harga_jual_eceran;
-                
-                $diskon = $item['quantity'] >= $harga->min_qty_grosir 
-                    ? $harga->diskon_grosir 
-                    : $harga->diskon_eceran;
-
-                $subtotal = $hargaSatuan * $item['quantity'];
-                $diskonNominal = ($diskon ? ($subtotal * $diskon / 100) : 0);
-
-                $totalHarga += $subtotal;
-                $totalDiskon += $diskonNominal;
-
-                return [
-                    'kode_barang' => $item['kode_barang'],
-                    'quantity' => $item['quantity'],
-                    'harga_satuan' => $hargaSatuan,
-                    'diskon' => $diskon,
-                    'subtotal' => $subtotal - $diskonNominal
-                ];
-            });
-
-            // Buat transaksi
-            $transaksi = Transaksi::create([
-                'no_transaksi' => $noTransaksi,
-                'tanggal_transaksi' => $today,
-                'jenis_transaksi' => 'Penjualan',
-                'no_referensi' => $request->no_referensi,
-                'total_harga' => $totalHarga,
-                'total_diskon' => $totalDiskon,
-                'grand_total' => $totalHarga - $totalDiskon,
-                'keterangan' => $request->keterangan
-            ]);
-
-            // Simpan detail transaksi
-            $transaksi->details()->createMany($items);
-
-            // Update stok
-            foreach ($items as $item) {
-                $stok = Stok::firstOrCreate(
-                    [
-                        'kode_barang' => $item['kode_barang'],
-                        'tanggal_stok' => $today->toDateString()
-                    ],
-                    [
-                        'stok_awal' => Stok::where('kode_barang', $item['kode_barang'])
-                            ->where('tanggal_stok', '<', $today->toDateString())
-                            ->latest('tanggal_stok')
-                            ->value('stok_akhir') ?? 0,
-                        'stok_masuk' => 0,
-                        'stok_keluar' => 0,
-                        'stok_akhir' => 0
-                    ]
-                );
-
-                $stok->stok_keluar += $item['quantity'];
-                $stok->stok_akhir = $stok->stok_awal + $stok->stok_masuk - $stok->stok_keluar;
-                
-                // Update status stok
-                $stok->status_barang = $this->getStatusStok($stok->stok_akhir, $stok->batas_minimum_stok);
-                $stok->save();
+            if (!$toko) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Data toko tidak ditemukan'
+                ], 404);
             }
 
-            DB::commit();
+            // Validasi request
+            $request->validate([
+                'items' => 'required|array|min:1',
+                'items.*.kode_barang' => 'required|exists:tbl_barang,kode_barang',
+                'items.*.quantity' => 'required|integer|min:1',
+                'total' => 'required|numeric|min:0',
+            ]);
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Transaksi berhasil disimpan',
-                'data' => [
-                    'transaksi' => $transaksi->load('details.barang'),
-                    'struk' => $this->generateStruk($transaksi)
-                ]
-            ], 201);
 
+            DB::beginTransaction();
+            try {
+                // Generate nomor transaksi
+                $noTransaksi = 'TRX-' . date('YmdHis') . '-' . str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT);
+
+                $itemNames = [];
+                foreach ($request->items as $item) {
+                    $barang = Barang::where('kode_barang', $item['kode_barang'])->first();
+                    $itemNames[] = "{$barang->nama_barang} ({$item['quantity']})";
+                }
+
+                $keterangan = "Penjualan " . implode(", ", $itemNames) . " pada " . now()->format('d/m/Y H:i');
+
+                // Buat header transaksi
+                $transaksi = Transaksi::create([
+                    'no_transaksi' => $noTransaksi,
+                    'tanggal_transaksi' => now(),
+                    'jenis_transaksi' => 'Penjualan',
+                    'total_harga' => $request->total,
+                    'total_diskon' => 0,
+                    'grand_total' => $request->total,
+                    'keterangan' => $keterangan
+                ]);
+
+                // Proses setiap item
+                foreach ($request->items as $item) {
+                    // Ambil data barang dan harga
+                    $barang = Barang::where('kode_barang', $item['kode_barang'])
+                        ->where('toko_id', $toko->id)
+                        ->firstOrFail();
+
+                    $harga = Harga::where('kode_barang', $item['kode_barang'])
+                        ->latest('tanggal_perubahan_harga')
+                        ->firstOrFail();
+
+                    // Cek stok
+                    $stok = Stok::where('kode_barang', $item['kode_barang'])
+                        ->where('toko_id', $toko->id)
+                        ->latest('tanggal_stok')
+                        ->firstOrFail();
+
+                    if ($stok->stok_akhir < $item['quantity']) {
+                        throw new \Exception("Stok tidak mencukupi untuk {$barang->nama_barang}");
+                    }
+
+                    // Hitung harga berdasarkan quantity
+                    $hargaSatuan = $item['quantity'] >= $harga->min_qty_grosir
+                        ? $harga->harga_jual_grosir
+                        : $harga->harga_jual_eceran;
+
+                    // Buat detail transaksi
+                    TransaksiDetails::create([
+                        'no_transaksi' => $noTransaksi,
+                        'kode_barang' => $item['kode_barang'],
+                        'quantity' => $item['quantity'],
+                        'harga_satuan' => $hargaSatuan,
+                        'diskon' => 0,
+                        'subtotal' => $hargaSatuan * $item['quantity']
+                    ]);
+
+                    // Update stok
+                    Stok::create([
+                        'toko_id' => $toko->id,
+                        'kode_barang' => $item['kode_barang'],
+                        'stok_awal' => $stok->stok_akhir,
+                        'stok_keluar' => $item['quantity'],
+                        'stok_akhir' => $stok->stok_akhir - $item['quantity'],
+                        'tanggal_stok' => now(),
+                        'status_barang' => $this->hitungStatusStok(
+                            $stok->stok_akhir - $item['quantity'],
+                            $stok->batas_minimum_stok
+                        )
+                    ]);
+                }
+
+                DB::commit();
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Transaksi berhasil',
+                    'data' => [
+                        'no_transaksi' => $noTransaksi,
+                        'total' => $request->total
+                    ]
+                ], 201);
+            } catch (\Exception $e) {
+                DB::rollback();
+                throw $e;
+            }
         } catch (\Exception $e) {
-            DB::rollback();
             return response()->json([
                 'success' => false,
-                'message' => 'Gagal menyimpan transaksi: ' . $e->getMessage()
+                'message' => 'Gagal memproses transaksi: ' . $e->getMessage()
             ], 500);
         }
     }
 
-    private function getStatusStok($stokAkhir, $batasMinimum)
+    private function hitungStatusStok($stokAkhir, $batasMinimum)
     {
         if ($stokAkhir <= 0) {
             return 'Habis';
-        } elseif ($batasMinimum && $stokAkhir <= $batasMinimum) {
+        }
+        if ($batasMinimum && $stokAkhir <= $batasMinimum) {
             return 'Hampir Habis';
         }
         return 'Tersedia';
     }
 
-
-    private function generateStruk($transaksi)
-    {
-        // Implementasi generate struk
-        // Bisa menggunakan package seperti barryvdh/laravel-dompdf
-        return null;
-    }
-
+    // Endpoint untuk mendapatkan detail transaksi
     public function show($noTransaksi)
     {
-        $transaksi = Transaksi::with('details.barang')
-            ->findOrFail($noTransaksi);
+        try {
+            $transaksi = Transaksi::with(['details.barang'])
+                ->where('no_transaksi', $noTransaksi)
+                ->firstOrFail();
 
-        return response()->json([
-            'success' => true,
-            'data' => $transaksi
-        ]);
-    }
-
-    public function getLaporanHarian(Request $request)
-    {
-        $tanggal = $request->get('tanggal', Carbon::today()->toDateString());
-
-        $laporan = Transaksi::with('details.barang')
-            ->whereDate('tanggal_transaksi', $tanggal)
-            ->where('jenis_transaksi', 'Penjualan')
-            ->get()
-            ->pipe(function ($transaksi) {
-                return [
-                    'total_transaksi' => $transaksi->count(),
-                    'total_penjualan' => $transaksi->sum('grand_total'),
-                    'total_diskon' => $transaksi->sum('total_diskon'),
-                    'detail_transaksi' => $transaksi
-                ];
-            });
-
-        return response()->json([
-            'success' => true,
-            'data' => $laporan
-        ]);
+            return response()->json([
+                'success' => true,
+                'data' => $transaksi
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Transaksi tidak ditemukan'
+            ], 404);
+        }
     }
 }

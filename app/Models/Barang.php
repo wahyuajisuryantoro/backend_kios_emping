@@ -18,6 +18,7 @@ class Barang extends Model
     
     protected $fillable = [
         'kode_barang',
+        'toko_id',
         'nama_barang',
         'kategori_id',
         'merk_barang',
@@ -33,6 +34,11 @@ class Barang extends Model
         'berat_barang' => 'decimal:2',
         'tanggal_kadaluarsa' => 'date'
     ];
+
+    public function toko(): BelongsTo
+    {
+        return $this->belongsTo(Toko::class);
+    }
 
     public function kategori(): BelongsTo
     {
