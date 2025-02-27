@@ -18,13 +18,14 @@ class TransaksiDetails extends Model
         'no_transaksi',
         'kode_barang',
         'quantity',
+        'satuan_transaksi_id',
         'harga_satuan',
         'diskon',
         'subtotal'
     ];
 
     protected $casts = [
-        'quantity' => 'integer',
+        'quantity' => 'decimal:2',
         'harga_satuan' => 'decimal:2',
         'diskon' => 'decimal:2',
         'subtotal' => 'decimal:2'
@@ -38,5 +39,10 @@ class TransaksiDetails extends Model
     public function barang(): BelongsTo
     {
         return $this->belongsTo(Barang::class, 'kode_barang', 'kode_barang');
+    }
+
+    public function satuanTransaksi(): BelongsTo
+    {
+        return $this->belongsTo(Satuan::class, 'satuan_transaksi_id');
     }
 }

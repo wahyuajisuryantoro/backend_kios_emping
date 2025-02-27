@@ -10,29 +10,29 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Barang extends Model
 {
     use SoftDeletes;
-    
+
     protected $table = 'tbl_barang';
     protected $primaryKey = 'kode_barang';
     public $incrementing = false;
     protected $keyType = 'string';
-    
+
     protected $fillable = [
         'kode_barang',
         'toko_id',
         'nama_barang',
         'kategori_id',
+        'tipe_perhitungan',
+        'satuan_dasar_id',
+        'nilai_barang',
         'merk_barang',
         'deskripsi_barang',
-        'berat_barang',
-        'volume_barang',
-        'satuan_barang',
         'gambar_barang',
         'tanggal_kadaluarsa'
     ];
-
+    
     protected $casts = [
-        'berat_barang' => 'decimal:2',
-        'tanggal_kadaluarsa' => 'date'
+        'tanggal_kadaluarsa' => 'date',
+        'nilai_barang' => 'decimal:2'
     ];
 
     public function toko(): BelongsTo
@@ -42,7 +42,12 @@ class Barang extends Model
 
     public function kategori(): BelongsTo
     {
-        return $this->belongsTo(Kategori::class, 'kategori_id');
+        return $this->belongsTo(Kategori::class);
+    }
+
+    public function satuanDasar(): BelongsTo
+    {
+        return $this->belongsTo(Satuan::class, 'satuan_dasar_id');
     }
 
     public function stok(): HasOne

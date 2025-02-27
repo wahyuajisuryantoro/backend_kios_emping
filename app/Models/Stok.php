@@ -16,26 +16,27 @@ class Stok extends Model
     protected $fillable = [
         'toko_id',
         'kode_barang',
+        'satuan_input_id',
         'stok_awal',
         'stok_masuk',
         'stok_keluar',
         'stok_akhir',
+        'satuan_akhir_id',
         'batas_minimum_stok',
         'lokasi_penyimpanan',
         'tanggal_stok',
         'status_barang'
     ];
-
+    
     protected $casts = [
         'tanggal_stok' => 'date',
-        'stok_awal' => 'integer',
-        'stok_masuk' => 'integer',
-        'stok_keluar' => 'integer',
-        'stok_akhir' => 'integer',
-        'batas_minimum_stok' => 'integer'
+        'stok_awal' => 'decimal:2',
+        'stok_masuk' => 'decimal:2',
+        'stok_keluar' => 'decimal:2',
+        'stok_akhir' => 'decimal:2',
+        'batas_minimum_stok' => 'decimal:2'
     ];
 
-    // Tambah relasi ke Toko
     public function toko(): BelongsTo
     {
         return $this->belongsTo(Toko::class);
@@ -44,5 +45,15 @@ class Stok extends Model
     public function barang(): BelongsTo
     {
         return $this->belongsTo(Barang::class, 'kode_barang', 'kode_barang');
+    }
+
+    public function satuanInput(): BelongsTo
+    {
+        return $this->belongsTo(Satuan::class, 'satuan_input_id');
+    }
+
+    public function satuanAkhir(): BelongsTo
+    {
+        return $this->belongsTo(Satuan::class, 'satuan_akhir_id');
     }
 }
